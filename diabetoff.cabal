@@ -1,0 +1,32 @@
+Name:                diabetoff
+Version:             0.1
+Synopsis:            Weight tracking website for my inlaws
+Homepage:            http://www.bitbucket.org/fusiongyro/diabetoff
+License:             BSD3
+License-file:        LICENSE
+Author:              Daniel Lyons
+Maintainer:          fusion@storytotell.org
+Category:            Web
+Build-type:          Simple
+
+Cabal-version:       >=1.2
+
+Executable diabetoff
+  Hs-Source-Dirs: src
+  Main-is: Main.hs
+  
+  Build-depends:       
+    HDBC >= 2.3.1.1 && < 2.4,
+    HDBC-postgresql >= 2.3.2.1 && < 2.4,
+    resource-pool >= 0.2.1.0 && < 0.3,
+    boomerang >= 1.3.1 && < 1.4,
+    web-routes-boomerang >= 0.26.0 && < 0.27,
+    happstack-server >= 7.0 && < 7.1,
+    web-routes-happstack >= 0.23.1 && < 0.24,
+    web-routes-th >= 0.21.1 && < 0.22,
+    text >= 0.11.1.5 && < 0.12,
+    containers >= 0.4.0.0 && < 0.5,
+    web-routes >= 0.27.1 && < 0.28,
+    blaze-html >= 0.4.3.1 && < 0.5,
+    mtl >= 2.0.1.0 && < 2.1,
+    haskell2010 >= 1.0.0.0 && < 1.1
