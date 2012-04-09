@@ -1,16 +1,56 @@
-module Database where
+module Database ( setupDatabase
+                , recordWeighIn
+                , lastWeeksLoss
+                , authenticate
+                , createUser
+                , updateTargetWeight ) where
 
 import Control.Applicative
+import Data.Time.Calendar
 
 import Database.HDBC
 import Database.HDBC.PostgreSQL
 
+import Types
+
+-- | Save a weigh-in for a particular user
+recordWeighIn :: (IConnection c) => c -> Name -> Weight -> Day -> IO ()
+recordWeighIn dbh name weight day = do
+  run dbh 
+      "INSERT INTO weighins (name, weight, measured_on) \
+      \VALUES (?, ?, ?)"
+      [toSql name, toSql weight, toSql day]
+  return ()
+
+lastWeeksLoss :: (IConnection c) => c -> IO [(Name, Double)]
+lastWeeksLoss db = map convert <$> quickQuery' db query []
+  where
+    query = "SELECT * FROM last_weeks_loss"
+    convert [name, loss] = (fromSql name, fromSql loss)
+
+authenticate :: (IConnection c) => c -> Name -> Password -> IO Bool
+authenticate db name password = 
+  (fromSql . head . head) <$> quickQuery' db "SELECT authenticate(?, ?)" [toSql name, toSql password]
+
+createUser :: (IConnection c) => c -> Name -> Password -> IO Bool
+createUser db name password = do
+  run db "SELECT create_user(?, ?)" [toSql name, toSql password]
+  return True
+
+updateTargetWeight :: (IConnection c) => c -> Name -> Weight -> IO ()
+updateTargetWeight db name weight = do
+  run db "UPDATE users SET target_weight = ? WHERE name = ?" [toSql weight, toSql name]
+  return ()
+
+-- | Ensure the database is properly configured for this version
 setupDatabase :: (IConnection c) => c -> IO ()
 setupDatabase dbh = do
   version <- schemaVersion dbh
   upgradeSchema version dbh
   commit dbh
 
+-- | Return the current version of the schema by inspecting the schema_version 
+-- table
 schemaVersion :: (IConnection c) => c -> IO Integer
 schemaVersion dbh = do
   tables <- getTables dbh
@@ -21,6 +61,7 @@ schemaVersion dbh = do
     where
       versionQuery = "SELECT version FROM schema_version"
 
+-- | Upgrade the database schema to the current version, if necessary
 upgradeSchema 0 dbh = do
   runRaw dbh 
          "CREATE EXTENSION pgcrypto;\n\
@@ -60,8 +101,46 @@ upgradeSchema 0 dbh = do
          \  CHECK(lock = 'X')\n\
          \);\n\
          \\n\
-         \INSERT INTO schema_version (version) VALUES (1);"
+         \INSERT INTO schema_version (version) VALUES (1);\n\
+         \\n\
+         \CREATE VIEW last_weeks_loss AS\n\
+         \WITH \n\
+         \  -- First we need all the last weeks\n\
+         \  last AS \n\
+         \    (SELECT name, MAX(measured_on) AS measured_on \n\
+         \     FROM weighins \n\
+         \     GROUP BY name), \n\
+         \     \n\
+         \  -- Next we need the previous weigh-ins\n\
+         \  previous AS \n\
+         \    (SELECT weighins.name, MAX(weighins.measured_on) AS measured_on\n\
+         \     FROM weighins\n\
+         \     JOIN last ON last.name = weighins.name\n\
+         \     WHERE weighins.measured_on < last.measured_on\n\
+         \     GROUP BY weighins.name),\n\
+         \\n\
+         \  -- Now we can get the last and previous weights\n\
+         \  last_weights AS \n\
+         \    (SELECT name, weight FROM weighins NATURAL JOIN last),\n\
+         \\n\  
+         \  previous_weights AS \n\
+         \    (SELECT name, weight FROM weighins NATURAL JOIN previous),\n\
+         \  \n\
+         \  -- now we can combine them and calculate their difference\n\
+         \  lossage AS \n\
+         \    (SELECT lw.name, pw.weight - lw.weight as loss \n\
+         \     FROM last_weights AS lw\n\
+         \     JOIN previous_weights AS pw ON (lw.name = pw.name)\n\
+         \     WHERE lw.weight < pw.weight),\n\
+         \\n\
+         \  total_loss AS \n\
+         \    (SELECT SUM(loss) AS total_loss FROM lossage)\n\
+         \\n\
+         \SELECT name, loss::numeric / total_loss.total_loss * 100 AS pct_lost\n\
+         \FROM lossage, total_loss;"
 
+-- Version 2 will fill in this function to migrate the database for its needs
 upgradeSchema 1 dbh = return ()
 
+-- We must be farther along than this codebase knows how to deal with
 upgradeSchema _ dbh = fail $ "Schema is too new for this version of the code"
