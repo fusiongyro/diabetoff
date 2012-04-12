@@ -10,6 +10,7 @@ baseTemplate title headers body =
     H.head $ do
       H.title $ H.toHtml $ "Diabetoff :: " ++ title
       H.meta ! A.httpEquiv "Content-Type" ! A.content "text/html;charset=utf-8"
+      H.link ! A.type_ "text/css" ! A.rel "stylesheet" ! A.href "css/style.css"
       sequence_ headers
     H.body $ do
       body

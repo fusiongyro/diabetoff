@@ -2,6 +2,7 @@
 module Main where
 
 import Control.Applicative
+import Control.Monad
 
 --import Paths_diabetoff (version)
 import Data.Pool
@@ -36,4 +37,6 @@ main = do
   putStrLn $ "Diabetoff v. " ++ showVersion version
   simpleHTTP nullConf $ runDatabaseReader handlers dbPool
     where
-      handlers = implSite "" "" site
+      handlers = msum
+        [ dir "css"    $ serveDirectory DisableBrowsing [] "css"
+        , implSite "" "" site ]
