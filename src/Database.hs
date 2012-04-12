@@ -1,9 +1,13 @@
-module Database ( setupDatabase
+{- module Database ( setupDatabase
                 , recordWeighIn
                 , lastWeeksLoss
                 , authenticate
                 , createUser
-                , updateTargetWeight ) where
+                , updateTargetWeight
+                , allWeighIns
+                , targetWeight ) where -}
+module Database ( module Database
+                , Connection(..)) where
 
 import Control.Applicative
 import Data.Time.Calendar
@@ -12,6 +16,17 @@ import Database.HDBC
 import Database.HDBC.PostgreSQL
 
 import Types
+
+connect = connectPostgreSQL
+
+disconnect :: IConnection conn => conn -> IO ()
+disconnect = Database.HDBC.disconnect
+
+doubleToFloat :: Double -> Float
+doubleToFloat = convertFloat
+
+convertFloat :: (RealFloat a, RealFloat c) => a -> c
+convertFloat = uncurry encodeFloat . decodeFloat
 
 -- | Save a weigh-in for a particular user
 recordWeighIn :: (IConnection c) => c -> Name -> Weight -> Day -> IO ()
@@ -22,11 +37,11 @@ recordWeighIn dbh name weight day = do
       [toSql name, toSql weight, toSql day]
   return ()
 
-lastWeeksLoss :: (IConnection c) => c -> IO [(Name, Double)]
+lastWeeksLoss :: (IConnection c) => c -> IO [(Name, Float)]
 lastWeeksLoss db = map convert <$> quickQuery' db query []
   where
     query = "SELECT * FROM last_weeks_loss"
-    convert [name, loss] = (fromSql name, fromSql loss)
+    convert [name, loss] = (fromSql name, doubleToFloat $ fromSql loss)
 
 authenticate :: (IConnection c) => c -> Name -> Password -> IO Bool
 authenticate db name password = 
@@ -60,6 +75,24 @@ schemaVersion dbh = do
   return version
     where
       versionQuery = "SELECT version FROM schema_version"
+
+-- | Return all the weigh-ins for this user
+allWeighIns :: (IConnection c) => c -> Name -> IO [(Day, Float)]
+allWeighIns dbh name = do
+  map convert <$> quickQuery' dbh query [toSql name]
+    where
+      query = "SELECT measured_on, weight FROM weighins WHERE name = ?"
+      convert [day, weight] = (fromSql day, doubleToFloat $ fromSql weight)
+
+targetWeight :: (IConnection c) => c -> Name -> IO Weight
+targetWeight dbh name = 
+  convert <$> quickQuery' dbh query [toSql name]
+  where
+    query = "SELECT target_weight FROM users WHERE name = ?"
+    
+    convert []          = 0
+    convert [[SqlNull]] = 0
+    convert [[x]]       = fromSql x
 
 -- | Upgrade the database schema to the current version, if necessary
 upgradeSchema 0 dbh = do
