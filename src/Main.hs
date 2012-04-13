@@ -12,15 +12,15 @@ import qualified Text.Blaze.Html5 as H
 import qualified Text.Blaze.Html5.Attributes as A
 
 import DiabetoffM
-import IndexPage
+import Pages
 
 version = Version [0,1] []
 
 route :: Sitemap -> DiabetoffM Response
 route url =
   case url of
-    Home -> indexPage
-    _ -> fail $ "No idea"
+    Home          -> indexPage
+    UserPage name -> userPage name
 
 site :: Site Sitemap (DatabaseReader Response)
 site = setDefault Home $ boomerangSite (runRouteT route) sitemap

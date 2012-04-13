@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module IndexPage where
+module Pages.Index where
 
 import Happstack.Server
 import Text.Blaze.Html5 as H
